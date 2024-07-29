@@ -3,11 +3,11 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
+from eventiq.exceptions import Fail, Skip
 from eventiq.middleware import Middleware
-from eventiq.types import ID
 
 if TYPE_CHECKING:
-    from eventiq import Broker, CloudEvent, Consumer, Message, Service
+    from eventiq import CloudEvent, Consumer, Service
 
 from prometheus_client import (
     REGISTRY,
@@ -57,13 +57,20 @@ class PrometheusMiddleware(Middleware):
         self.buckets = buckets
         self.server_host = server_host
         self.server_port = server_port
-        self.message_start_times: dict[tuple[str, str, ID], int] = {}
+        self.message_start_times: dict[int, int] = {}
         self.prefix = prefix
         self.http_server_options = http_server_options
+
         self.in_progress = Gauge(
             self.format("messages_in_progress"),
             "Total number of messages being processed.",
             ["topic", "service", "consumer"],
+            registry=self.registry,
+        )
+        self.total_messages_published = Counter(
+            self.format("messages_published_total"),
+            "Total number of messages published",
+            ["topic", "service"],
             registry=self.registry,
         )
         self.total_messages = Counter(
@@ -77,13 +84,7 @@ class PrometheusMiddleware(Middleware):
             "Total number of messages skipped processing.",
             registry=self.registry,
         )
-        self.total_messages_published = Counter(
-            self.format("messages_published_total"),
-            "Total number of messages published",
-            ["topic", "service"],
-            registry=self.registry,
-        )
-        self.total_errored_messages = Counter(
+        self.total_retried_messages = Counter(
             self.format("message_error_total"),
             "Total number of errored messages.",
             ["topic", "service", "consumer"],
@@ -113,63 +114,58 @@ class PrometheusMiddleware(Middleware):
         return value
 
     async def before_process_message(
-        self, broker: Broker, service: Service, consumer: Consumer, message: CloudEvent
+        self, *, service: Service, consumer: Consumer, message: CloudEvent
     ):
         labels = (consumer.topic, service.name, consumer.name)
         self.in_progress.labels(*labels).inc()
-        self.message_start_times[
-            (service.name, consumer.name, message.id)
-        ] = self.current_millis()
+        self.message_start_times[id(message)] = self.current_millis()
 
     async def after_process_message(
         self,
-        broker: Broker,
+        *,
         service: Service,
         consumer: Consumer,
         message: CloudEvent,
         result: Any | None = None,
         exc: Exception | None = None,
     ) -> None:
-        labels = (consumer.topic, service.name, consumer.name)
+        labels = (service.name, consumer.name, message.topic)
         self.in_progress.labels(*labels).dec()
         self.total_messages.labels(*labels).inc()
-        if exc:
-            self.total_errored_messages.labels(*labels).inc()
-
         message_start_time = self.message_start_times.pop(
-            (service.name, consumer.name, message.id), self.current_millis()
+            id(message), self.current_millis()
         )
         message_duration = self.current_millis() - message_start_time
         self.message_durations.labels(*labels).observe(message_duration)
 
+    async def after_retry_message(
+        self,
+        *,
+        service: Service,
+        consumer: Consumer,
+        message: CloudEvent,
+        exc: Exception,
+    ) -> None:
+        labels = (service.name, consumer.name, message.topic)
+        self.total_retried_messages.labels(*labels).inc()
+
     async def after_skip_message(
-        self, broker: Broker, service: Service, consumer: Consumer, message: CloudEvent
+        self, *, service: Service, consumer: Consumer, message: CloudEvent, exc: Skip
     ) -> None:
         labels = (consumer.topic, service.name, consumer.name)
         self.total_skipped_messages.labels(*labels).inc()
 
-    async def after_publish(self, broker: Broker, message: CloudEvent, **kwargs):
-        self.total_messages_published.labels(message.topic, message.source).inc()
-
-    async def after_nack(
-        self, broker: Broker, service: Service, consumer: Consumer, message: Message
+    async def after_fail_message(
+        self, *, service: Service, consumer: Consumer, message: CloudEvent, exc: Fail
     ):
-        labels = (consumer.topic, service.name, consumer.name)
-        self.total_errored_messages.labels(*labels).inc()
+        labels = (service.name, consumer.name, message.topic)
+        self.total_failed_messages.labels(*labels).inc()
 
-    async def after_ack(
-        self,
-        broker: Broker,
-        service: Service,
-        consumer: Consumer,
-        message: Message,
-    ) -> None:
-        if message.failed:
-            labels = (consumer.topic, service.name, consumer.name)
-            self.total_failed_messages.labels(*labels).inc()
+    async def after_publish(self, *, service: Service, message: CloudEvent, **kwargs):
+        labels = (service.name, message.topic)
+        self.total_messages_published.labels(*labels).inc()
 
-    async def after_broker_connect(self, broker: Broker):
-        # TODO: after application start instead of broker?
+    async def after_broker_connect(self, *, service: Service):
         if self.run_server:
             start_http_server(
                 self.server_port,

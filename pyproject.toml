@@ -21,7 +21,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = ["prometheus-client", "eventiq"]
+dependencies = ["prometheus-client", "eventiq==0.3.0rc0"]
 
 [project.urls]
 Documentation = "https://github.com/asynq-io/eventiq-exporter#readme"
@@ -34,8 +34,10 @@ path = "eventiq_exporter/__about__.py"
 [tool.hatch.envs.default]
 dependencies = [
     "pytest",
-    "pyyaml",
+    "pytest-asyncio",
+    "pytest-sugar",
     "pytest-cov",
+    "pytest-repeat",
     "ruff",
     "mypy>=1.0.0",
     "bandit",
@@ -62,6 +64,12 @@ tests = ["tests"]
 
 [tool.coverage.report]
 exclude_lines = ["no cov", "if __name__ == .__main__.:", "if TYPE_CHECKING:"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=./eventiq_exporter"
+testpaths = ["./tests"]
+asyncio_mode = "auto"
+filterwarnings = "ignore::DeprecationWarning"
 
 [tool.pyright]
 venvPath = ".venv"
