@@ -11,3 +11,19 @@
 # eventiq-exporter
 
 Prometheus metrics exporter for eventiq
+
+## Installation
+```shell
+pip install eventiq-exporter
+```
+
+## Usage
+
+```python
+from eventiq import Service
+from eventiq_exporter import PrometheusExporter
+
+service = Service(...)
+service.add_middleware(PrometheusMiddleware, run_server=True)
+
+```
