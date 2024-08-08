@@ -6,7 +6,7 @@ from eventiq_exporter import PrometheusMiddleware
 
 async def test_consumer_called(running_service: Service, ce: CloudEvent, mock_consumer):
     await running_service.publish(ce)
-    mock_consumer.assert_awaited_once_with(ce)
+    mock_consumer.assert_called_once_with(ce)
 
 
 async def test_prometheus_middleware(service, mock_consumer, ce):

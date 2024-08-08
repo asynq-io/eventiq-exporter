@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 from eventiq import CloudEvent, Service
 from eventiq.backends.stub import StubBroker
+from eventiq.consumer import Consumer, FnConsumer
 from eventiq.utils import utc_now
 
 
@@ -45,7 +46,10 @@ def mock_consumer():
 
 @pytest_asyncio.fixture()
 async def running_service(service: Service, mock_consumer):
-    service.subscribe(topic="test_topic")(mock_consumer)
+    consumer: Consumer = FnConsumer(
+        fn=mock_consumer, event_type=CloudEvent, topic="test_topic"
+    )
+    service.consumer_group.add_consumer(consumer)
     task = asyncio.create_task(service.run(enable_signal_handler=False))
     await asyncio.sleep(0)
     yield service
