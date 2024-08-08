@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import suppress
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -34,9 +34,12 @@ def handler():
 
 
 @pytest.fixture()
-def mock_consumer(handler):
-    mock = AsyncMock(spec=handler)
-    mock.__annotations__ = handler.__annotations__
+def mock_consumer():
+    # this is workaround for inspect.getsignature() of AsyncMock
+    # https://github.com/python/cpython/issues/96127
+    mock = MagicMock(return_value=AsyncMock())
+    mock.__annotations__ = {"message": CloudEvent, "return": None}
+    mock.__name__ = "mock_consumer"
     return mock
 
 
