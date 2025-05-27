@@ -90,7 +90,13 @@ class PrometheusMiddleware(Middleware):
             registry=self.registry,
         )
         self.total_retried_messages = Counter(
-            self.format("message_error_total"),
+            self.format("message_retried_total"),
+            "Total number of errored messages.",
+            ["service", "consumer"],
+            registry=self.registry,
+        )
+        self.total_errored_messages = Counter(
+            self.format("message_errored_total"),
             "Total number of errored messages.",
             ["service", "consumer"],
             registry=self.registry,
@@ -149,6 +155,8 @@ class PrometheusMiddleware(Middleware):
     ) -> None:
         labels = (self.service.name, consumer.name)
         self.total_retried_messages.labels(*labels).inc()
+        if exc.__cause__ is not None:
+            self.total_errored_messages.labels(*labels).inc()
 
     async def after_skip_message(
         self, *, consumer: Consumer, message: CloudEvent, exc: Skip
