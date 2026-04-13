@@ -129,7 +129,7 @@ class PrometheusMiddleware(Middleware):
         self.in_progress.labels(*labels).inc()
         self.message_start_times[id(message)] = self.current_millis()
 
-    async def after_process_message(
+    async def after_message_finalized(
         self,
         *,
         consumer: Consumer,
