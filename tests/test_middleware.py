@@ -22,11 +22,13 @@ async def test_prometheus_middleware(service, mock_consumer, ce):
     assert isinstance(middleware, PrometheusMiddleware)
     await middleware.before_broker_connect()
     await middleware.before_process_message(consumer=mock_consumer, message=ce)
-    await middleware.after_process_message(
+    await middleware.after_message_finalized(
         consumer=mock_consumer, message=ce, result=42
     )
-    await middleware.after_process_message(consumer=mock_consumer, message=ce, exc=None)
-    await middleware.after_process_message(
+    await middleware.after_message_finalized(
+        consumer=mock_consumer, message=ce, exc=None
+    )
+    await middleware.after_message_finalized(
         consumer=mock_consumer, message=ce, exc=Exception()
     )
     await middleware.after_retry_message(
